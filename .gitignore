@@ -7,3 +7,6 @@ sitl_bench/runs/*/*/eeprom.bin
 # ATLAS writes simulated logs here at runtime
 atlas/sim_logs/*
 !atlas/sim_logs/.gitkeep
+
+# Machine-specific paths chosen in the AMC Handoff tab
+atlas/atlas_settings.json

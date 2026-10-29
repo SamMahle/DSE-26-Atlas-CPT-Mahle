@@ -2,7 +2,7 @@
 
 | Folder | What it is |
 |---|---|
-| [`atlas/`](atlas/README.md) | **ATLAS v14**: Acro configuration intelligence. Stores builds, retrieves similar cases, predicts an Acro tune, checks it against safety bounds, and writes it to a flight controller only after confirmation. |
+| [`atlas/`](atlas/README.md) | **ATLAS v9.1**: Acro configuration intelligence. Stores builds, retrieves similar cases, predicts an Acro tune, checks it against safety bounds, and writes it to a flight controller only after confirmation. Hands full builds to ArduPilot Methodic Configurator as ready projects. |
 | [`sitl_bench/`](sitl_bench/README.md) | **Standardized SITL test bench**: flies an identical test flight in ArduPilot SITL for each parameter configuration and scores every run from its onboard log, so runs can be compared directly. |
 
 Both run on Windows with Python 3 and `pip install pymavlink`. The bench uses

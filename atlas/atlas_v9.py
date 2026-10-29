@@ -23,6 +23,7 @@ import ml_model
 import ardupilot_interface as fc
 import sim_logs
 import check_link
+import amc_tab          # Configuration tab: AMC engine (prototype) and AMC handoff
 
 APP_DIR = Path(__file__).resolve().parent
 DB_PATH = APP_DIR / "atlas_repository.db"
@@ -112,10 +113,13 @@ def parse_param(path):
         if a: out.append((a,b))
     return out
 
-APP_VERSION = "9.0 ACRO"
+APP_VERSION = "9.1 ACRO"
 
 # Tab indices, so the quick-action buttons don't depend on counting.
-TAB_OVERVIEW, TAB_INGEST, TAB_CBR, TAB_PREDICT, TAB_FC, TAB_SIM, TAB_REPO, TAB_HW = range(8)
+# Order must match the build_* calls in __init__. The Standard Bench tab was
+# added without updating this line, which sent the Repository and Hardware
+# Catalog buttons to the wrong tabs.
+TAB_OVERVIEW, TAB_INGEST, TAB_CBR, TAB_PREDICT, TAB_FC, TAB_SIM, TAB_BENCH, TAB_REPO, TAB_HW, TAB_AMC = range(10)
 
 
 class ATLAS(tk.Tk):
@@ -133,6 +137,7 @@ class ATLAS(tk.Tk):
         self.build_home(); self.build_ingest(); self.build_search()
         self.build_predict(); self.build_fc(); self.build_sim(); self.build_bench()
         self.build_browser(); self.build_hardware()
+        self.amc=amc_tab.AMCHandoffTab(self,self.tabs,db)
         ttk.Label(self,textvariable=self.status,style="Status.TLabel").pack(fill="x",padx=24,pady=(0,12))
         self.refresh_all()
         self.after(120, self._drain_worker_queue)
@@ -202,7 +207,7 @@ class ATLAS(tk.Tk):
         s.map("Treeview",background=[("selected",c["red2"])],foreground=[("selected","white")])
         s.configure("Treeview.Heading",font=("Segoe UI Semibold",9),background=c["panel2"],foreground=c["muted"],relief="flat",padding=(8,8))
         s.map("Treeview.Heading",background=[("active",c["line"])])
-        s.configure("TNotebook",background=c["bg"],borderwidth=0); s.configure("TNotebook.Tab",padding=(18,11),background=c["panel"],foreground=c["muted"],borderwidth=0)
+        s.configure("TNotebook",background=c["bg"],borderwidth=0); s.configure("TNotebook.Tab",padding=(14,11),background=c["panel"],foreground=c["muted"],borderwidth=0)
         s.map("TNotebook.Tab",background=[("selected",c["panel2"])],foreground=[("selected",c["text"])])
         s.configure("TEntry",fieldbackground=c["panel2"],foreground=c["text"],insertcolor=c["text"],padding=7)
         s.configure("TCombobox",fieldbackground=c["panel2"],foreground=c["text"],arrowcolor=c["muted"],padding=6)
@@ -242,9 +247,12 @@ class ATLAS(tk.Tk):
         ttk.Button(actions,text="Flight Controller",style="Secondary.TButton",command=lambda:self.tabs.select(TAB_FC)).pack(side="left",padx=7,pady=8)
         ttk.Button(actions,text="Repository",style="Secondary.TButton",command=lambda:self.tabs.select(TAB_REPO)).pack(side="left",padx=7,pady=8)
         ttk.Button(actions,text="Hardware Catalog",style="Secondary.TButton",command=lambda:self.tabs.select(TAB_HW)).pack(side="left",padx=7,pady=8)
+        ttk.Button(actions,text="Configuration",style="Secondary.TButton",command=lambda:self.tabs.select(TAB_AMC)).pack(side="left",padx=7,pady=8)
         info=ttk.LabelFrame(p,text="HOW A TUNE REACHES AN AIRCRAFT",style="Card.TLabelframe"); info.pack(fill="x")
         ttk.Label(info,text="RETRIEVE OR PREDICT     →     SAFETY BOUNDS     →     YOU CONFIRM     →     MAVLINK WRITE     →     FLIGHT EVIDENCE",font=("Segoe UI Semibold",10),foreground=self.C["text"],background=self.C["panel"]).pack(anchor="w",pady=(8,4))
         ttk.Label(info,text="No model output reaches an aircraft directly. Case retrieval and the prediction model both hand their proposal to the same fail-closed check, which rejects anything outside its approved range or not on its list at all — then a person confirms before a single parameter is written.",style="Sub.TLabel",background=self.C["panel"],wraplength=1200,justify="left").pack(anchor="w",pady=(0,8))
+        ttk.Label(info,text="FULL BUILD     →     AMC HANDOFF     →     AMC CONFIGURES, CALIBRATES, TUNES     →     AMC WRITE     →     FLIGHT EVIDENCE",font=("Segoe UI Semibold",10),foreground=self.C["text"],background=self.C["panel"]).pack(anchor="w",pady=(10,4))
+        ttk.Label(info,text="A whole configuration — not just the Acro tune — goes to ArduPilot Methodic Configurator as a project. ATLAS strips the source board's calibrations and runs the same Acro bounds check; AMC then walks every configuration step, keeps its own mandatory safety values, and asks before each write.",style="Sub.TLabel",background=self.C["panel"],wraplength=1200,justify="left").pack(anchor="w",pady=(0,8))
 
     def _metric_card(self,parent,value,label):
         card=tk.Frame(parent,bg=self.C["panel"],highlightbackground=self.C["line"],highlightthickness=1)
@@ -279,7 +287,7 @@ class ATLAS(tk.Tk):
             make_cb={"Flight Controller":self.fc_make_cb,"ESC":self.esc_make_cb,"Motor":self.motor_make_cb}[cat]
             make_cb.bind("<<ComboboxSelected>>",lambda e,c=cat,m=mv,mo=modv,w=cb:self.update_models(c,m,mo,w))
         self.field(hw,"Motor stator",self.vars["motor_stator"],6,0,values=["2004","2207","2306","2506","2806.5","2812","3110","Other / Custom"]); self.field(hw,"Motor KV",self.vars["motor_kv"],6,1); self.field(hw,"Motor quantity",self.vars["motor_qty"],6,2,values=["1","2","4","6","8"])
-        ttk.Button(hw,text="Manage hardware catalog…",command=lambda:self.tabs.select(4)).grid(row=8,column=2,sticky="e",padx=6,pady=8)
+        ttk.Button(hw,text="Manage hardware catalog…",command=lambda:self.tabs.select(TAB_HW)).grid(row=8,column=2,sticky="e",padx=6,pady=8)
         meas=ttk.LabelFrame(form,text="3. Airframe measurements  —  required for parameter prediction",style="Card.TLabelframe"); meas.pack(fill="x",pady=6)
         ttk.Label(meas,text="The prediction model learns from these. Without them an aircraft still stores and still works for case retrieval, but it cannot train or receive a prediction.",style="Sub.TLabel",background=self.C["panel"],wraplength=1150,justify="left").grid(row=0,column=0,columnspan=4,sticky="w",padx=6,pady=(0,6))
         self.field(meas,"All-up weight (g)",self.vars["weight_g"],1,0)
@@ -1436,6 +1444,7 @@ class ATLAS(tk.Tk):
     def refresh_all(self):
         self.refresh_browser(); self.refresh_hardware(); self.refresh_ingest_catalog()
         self.refresh_predict(); self.refresh_fc_pending(); self.refresh_sim(); self.refresh_bench()
+        if hasattr(self,"amc"): self.amc.refresh()
         with db() as c: na=c.execute("SELECT COUNT(*) FROM aircraft").fetchone()[0]; nc=c.execute("SELECT COUNT(*) FROM components").fetchone()[0]; nh=c.execute("SELECT COUNT(*) FROM hardware_catalog WHERE active=1").fetchone()[0]; np=c.execute("SELECT COUNT(*) FROM parameters").fetchone()[0]; nt=bridge.census(c)["trainable"]
         self.stat_air.configure(text=str(na)); self.stat_comp.configure(text=str(nc)); self.stat_hw.configure(text=str(nh)); self.stat_param.configure(text=str(np))
         if hasattr(self,"stat_train"): self.stat_train.configure(text=str(nt))
