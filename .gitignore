@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+
+# SITL scratch state, recreated on every run
+sitl_bench/runs/*/*/eeprom.bin
+
+# ATLAS writes simulated logs here at runtime
+atlas/sim_logs/*
+!atlas/sim_logs/.gitkeep

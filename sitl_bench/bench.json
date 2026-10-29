@@ -1,0 +1,25 @@
+{
+  "sitl_binary": "~/Documents/Mission Planner/sitl/ArduCopter.exe",
+  "copter_defaults": "~/Documents/Mission Planner/sitl/default_params/copter.parm",
+  "frame": "x",
+  "model_file": "5inch.json",
+  "base_params": "5inch.parm",
+  "speedup": 10,
+  "workers": 2,
+  "repeats": 3,
+  "configs": {
+    "baseline": {},
+    "rate_P_low": {"ATC_RAT_RLL_P": 0.10, "ATC_RAT_PIT_P": 0.10},
+    "rate_P_high": {"ATC_RAT_RLL_P": 0.18, "ATC_RAT_PIT_P": 0.18},
+    "wind_5ms": {"SIM_WIND_SPD": 5, "SIM_WIND_DIR": 90}
+  },
+  "headline_metrics": [
+    "rate_rms_roll_dps",
+    "roll_step_rise_s",
+    "roll_step_overshoot_pct",
+    "step_overshoot_m",
+    "box_xtrack_rms_m",
+    "hover_throttle",
+    "mah_total"
+  ]
+}
