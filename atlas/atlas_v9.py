@@ -11,6 +11,7 @@ import subprocess
 import threading
 import traceback
 import cbr_engine as cbr
+import make_demo_data            # sample-data loader, reused by the Data menu
 import json
 
 # --- Acro tuning layer -----------------------------------------------------
@@ -128,7 +129,7 @@ class ATLAS(tk.Tk):
         self.vehicle=None                 # the one live flight-controller link
         self.worker_q=queue.Queue()       # background thread -> GUI thread
         self.last_prediction=None
-        self._style(); self._header()
+        self._style(); self._menubar(); self._header()
         self.tabs=ttk.Notebook(self); self.tabs.pack(fill="both",expand=True,padx=24,pady=(8,10))
         self.build_home(); self.build_ingest(); self.build_search()
         self.build_predict(); self.build_fc(); self.build_sim(); self.build_bench()
@@ -137,6 +138,95 @@ class ATLAS(tk.Tk):
         self.refresh_all()
         self.after(120, self._drain_worker_queue)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.after(250, self._first_run_welcome)
+
+    # ---------------------------------------------------------------------
+    # Menu bar, first-run welcome, and sample data. These exist so someone
+    # evaluating ATLAS can open it, fill it, and understand it without ever
+    # touching a terminal — make_demo_data.py used to be the only way in.
+    # ---------------------------------------------------------------------
+    def _menubar(self):
+        bar=tk.Menu(self)
+        data=tk.Menu(bar,tearoff=0)
+        data.add_command(label="Load sample data (fake aircraft)…",command=self.load_demo_data)
+        data.add_command(label="Remove sample data",command=self.remove_demo_data)
+        bar.add_cascade(label="Data",menu=data)
+        helpm=tk.Menu(bar,tearoff=0)
+        helpm.add_command(label="What is ATLAS? / Quick start",command=self.show_quickstart)
+        helpm.add_command(label="About ATLAS",command=self.show_about)
+        bar.add_cascade(label="Help",menu=helpm)
+        self.config(menu=bar)
+
+    def _aircraft_count(self):
+        with db() as c: return c.execute("SELECT COUNT(*) FROM aircraft").fetchone()[0]
+
+    def _first_run_welcome(self):
+        """On an empty repository, offer to load sample data with one click."""
+        if self._aircraft_count() > 0: return
+        load=messagebox.askyesno(
+            "Welcome to ATLAS",
+            "ATLAS helps you choose and safely apply an Acro-mode flight tune for "
+            "a drone, learning from past builds.\n\n"
+            "Your repository is currently empty, so the Predict and Overview "
+            "screens will have nothing to show.\n\n"
+            "Load 17 sample aircraft now so you can explore how it works?\n\n"
+            "(This data is FAKE — for demonstration only. You can remove it any "
+            "time from the Data menu.)")
+        if load: self.load_demo_data(confirm=False)
+        else: self.show_quickstart()
+
+    def load_demo_data(self, confirm=True):
+        if confirm and self._aircraft_count() > 0:
+            if not messagebox.askyesno(
+                "Load sample data",
+                "This adds 17 fake 'DEMO-' aircraft so the Predict screen has "
+                "something to work with.\n\nThe data is not real. Continue?"):
+                return
+        try:
+            make_demo_data.populate()
+        except Exception as exc:                       # noqa: BLE001
+            messagebox.showerror("Could not load sample data", str(exc)); return
+        self.refresh_all()
+        messagebox.showinfo(
+            "Sample data loaded",
+            "Added sample aircraft (all named 'DEMO-…', all fake).\n\n"
+            "Open the Predict Tuning tab to see the model work, or Overview for "
+            "the repository summary. Remove it any time from the Data menu.")
+
+    def remove_demo_data(self):
+        if not messagebox.askyesno(
+            "Remove sample data",
+            "Delete every 'DEMO-' aircraft and its records? Real aircraft you "
+            "added are not affected."):
+            return
+        try:
+            make_demo_data.remove()
+        except Exception as exc:                       # noqa: BLE001
+            messagebox.showerror("Could not remove sample data", str(exc)); return
+        self.refresh_all()
+        messagebox.showinfo("Sample data removed","All 'DEMO-' aircraft were deleted.")
+
+    def show_quickstart(self):
+        messagebox.showinfo(
+            "What is ATLAS? / Quick start",
+            "ATLAS suggests an Acro-mode flight tune for a drone and never lets an "
+            "unsafe value reach the aircraft.\n\n"
+            "THE IDEA\n"
+            "  Retrieve or predict  →  safety check  →  you confirm  →  write to aircraft\n\n"
+            "TRY IT IN 3 STEPS\n"
+            "  1. Data menu → Load sample data (gives the model something to learn from).\n"
+            "  2. Overview tab — see the repository summary.\n"
+            "  3. Predict Tuning tab — pick an aircraft and predict its tune.\n\n"
+            "The Flight Controller and Simulation tabs need a connected aircraft "
+            "or the 'pymavlink' package; they will tell you if it is missing "
+            "instead of failing.")
+
+    def show_about(self):
+        messagebox.showinfo(
+            "About ATLAS",
+            f"ATLAS v{APP_VERSION}\nAcro Configuration Intelligence\n\n"
+            "Local, offline repository and tuning assistant for ArduPilot Acro mode.\n"
+            "DSE-26 capstone.")
 
     # ---------------------------------------------------------------------
     # Background work. Tkinter is not thread safe, so a worker thread never
