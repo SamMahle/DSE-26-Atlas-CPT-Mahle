@@ -1,4 +1,4 @@
-# ATLAS v9 | Acro Configuration Intelligence
+# ATLAS v9.1 | Acro Configuration Intelligence
 
 Run `run_atlas.bat` on Windows, or `python atlas_v9.py`. Python 3 with Tkinter
 required. **No pip packages are needed to launch**, browse, retrieve cases, or
@@ -9,6 +9,161 @@ and its absence is reported in those two tabs rather than stopping the program.
 ```
 pip install pymavlink      # only for the Flight Controller and Simulation tabs
 ```
+
+---
+
+## What changed in v9.1 — Configuration tab (AMC engine prototype + AMC handoff)
+
+> **Licensing hold.** `amc_engine.py` imports ArduPilot Methodic Configurator
+> (GPL-3). Distributing ATLAS with it makes ATLAS GPL-3. Sponsor decision
+> pending (ATLAS licensing decision memo). Keep `amc_engine.py` out of any copy
+> delivered outside West Point until then; ATLAS runs without it.
+
+### Generate Parameter File (prototype, option B)
+
+One application, no AMC window. Install the engine into the same Python:
+
+```
+pip install ardupilot_methodic_configurator==5.0.1    # ~45 packages, ~300 MB; Python 3.11+
+```
+
+The **Configuration** tab then computes a full **first-flight** parameter file:
+
+1. Start from AMC's **empty** template for the build's firmware, so no other
+   airframe's choices ride along.
+2. Fill AMC's component model from the build (as in the handoff below).
+3. Run AMC's own engine: derived values (battery thresholds, prop-scaled
+   controller limits and filters, protocols), mandatory values, and component
+   validation. The firmware's default parameter list stands in for a connected
+   flight controller.
+4. Keep steps **00–27** only. AMC's phase list starts *"Minimalistic mandatory
+   tuning using test flight data"* at step 28; values after that come from
+   flights, so a template's copies are another airframe's or placeholders.
+5. Overlay the build's own tune, when it has one, except AMC's mandatory values
+   in the kept steps. Calibrations are stripped as in the handoff.
+6. Refuse to write anything while AMC reports a component error. Write the
+   `.param` file and a `.report.json` beside it, never overwriting.
+
+Checked: 15-inch props on 6S give `ATC_ACCEL_P_MAX` 78000 and `INS_GYRO_FILTER`
+30; 5-inch props give 168600 and 75, following ArduPilot's prop-size formulas.
+A build with no power module recorded gets `BATT_MONITOR=0`. ArduPilot then has
+no battery thresholds at all, so the report leads with that warning.
+
+**Needs offline parameter documentation** (`amc_metadata/`) for the firmware.
+Without it the engine stops rather than guess, because protocol names cannot be
+converted to values.
+
+
+ATLAS now hands builds to **ArduPilot Methodic Configurator (AMC)**, the
+ArduPilot developers' own step-by-step configurator, and can seed the
+repository from AMC's published vehicle templates. ATLAS stays the library and
+the interface; AMC does the configuration, calibration, tuning steps and every
+write to the flight controller.
+
+### AMC vs tune: who wins
+
+Where AMC would set a value the build's tune disagrees with, ATLAS lists it
+under **Decide AMC vs Tune (N)** instead of choosing silently. Two kinds:
+
+- **mandatory**: a value AMC forces at one of its steps (for example
+  `BATT_FS_CRT_ACT` = Land at step 10);
+- **calculated**: a value AMC derives from the components (for example
+  `ATC_ACCEL_P_MAX` from prop size). The engine finds these by running AMC; the
+  handoff alone can list only mandatory values.
+
+**Default rule:** mandatory values that are safety decisions (failsafes, arming,
+fences, return-to-launch, landing) use AMC. Everything else uses the build's
+validated tune, because a flown tune is evidence and AMC's values are starting
+points. The operator can switch any row. Overruling a safety value asks for
+confirmation and shows in red. Every disagreement, the value used, and whether
+the default rule or the operator decided it are written to the report
+(`amc_vs_atlas`), and overruled safety values are listed first under
+`review_before_flight`.
+
+The same choices apply to both outputs. In an exported AMC project, a tune
+value chosen over a mandatory one goes in the imported parameter file, which
+AMC applies after its own step.
+
+Command line: `python amc_engine.py <id> --amc PARAM --atlas PARAM …`
+
+### Export AMC Project (handoff)
+
+**The handoff, in the same tab**
+
+| Step | What happens |
+|---|---|
+| 1. Aircraft | Pick any stored build. |
+| 2. Starting template | Suggested automatically. A build **with** a parameter snapshot starts from AMC's *empty* template for its firmware (e.g. `empty_4.7.x`), so its own tune is the only content. A build **without** one starts from the nearest published AMC build by frame class, prop size and cell count. |
+| 3. Review | Every AMC component field ATLAS fills is listed with its source: *ATLAS record*, *parameter snapshot*, *inferred*, or *template default* (amber — confirm in AMC). Warnings and blockers are listed before anything is written. |
+| Export | Writes an AMC project folder. **Open in AMC** launches AMC on it. |
+
+**What the exported project contains**
+
+```
+<name>_ATLAS/
+    00_default.param … 70_everyday_use.param   AMC's template, unchanged
+    vehicle_components.json                    built from the ATLAS record
+    71_imported_atlas_parameters.param         the ATLAS tune, as a delta
+    apm.pdef.xml                               parameter docs, when available offline
+    atlas_handoff.json                         provenance and review report
+```
+
+`NN_imported_<source>_parameters.param` is AMC's own convention for imported
+configurations, so AMC handles the ATLAS tune exactly as it handles a tune it
+imported from a flight controller.
+
+**Rules the handoff enforces**
+
+- **Calibrations do not travel.** Accelerometer, gyro, compass, barometer,
+  level and radio calibrations belong to one physical board and are left out,
+  unless *Same physical flight controller* is ticked. Device IDs and counters
+  never travel.
+- **The Acro bounds still apply.** Any Acro parameter outside `safety.py`'s
+  approved range blocks the export, the same fail-closed check as every other
+  exit.
+- **The operator decides where AMC and the tune disagree.** See below.
+- **Nothing is invented.** A component field ATLAS cannot source keeps the
+  template value and is flagged. AMC re-validates every field before it will
+  continue.
+- **Exports never overwrite** an existing folder, and validation status never
+  transfers: the report says so in writing.
+
+**Import AMC Templates** adds AMC's published builds (24 at the time of
+writing) to the repository with their components and end-state parameters.
+They are stored **UNTESTED**: they were configured by the AMC project, not
+flown by this team, so they are excluded from training like any other
+untested build.
+
+**Licensing boundary.** AMC is GPL-3. ATLAS exchanges *files* with it and
+never imports its code, which keeps ATLAS a separate program. Importing AMC's
+Python modules into ATLAS would change that; check with the sponsor first.
+
+**Offline use.** AMC needs ArduPilot's parameter documentation
+(`apm.pdef.xml`) for the firmware version and downloads it the first time a
+project opens. For an offline machine, put the matching file in
+`amc_metadata/` (see the README there) and ATLAS will include it in every
+export for that release.
+
+**Verified** by loading an exported project with AMC's own code (AMC 5.0.1): the
+components pass AMC's JSON schema, AMC recognises the imported file, and after
+AMC computes every derived parameter the final state matches the source tune on
+all ~1,190 transferable parameters except the AMC mandatory values the export
+lists.
+
+**Fixed in passing:** the tab-index constants predated the Standard Bench tab,
+so the Overview's *Repository* and *Hardware Catalog* buttons and the Add
+Aircraft *Manage hardware catalog…* button opened the wrong tabs.
+
+### Command line
+
+```
+python amc_bridge.py templates                         # list AMC templates found
+python amc_bridge.py export 2 --out D:\AMC --dry-run   # show what an export would contain
+python amc_bridge.py export 2 --out D:\AMC             # write it
+python amc_bridge.py import-templates --dry-run        # preview seeding the repository
+```
+
+`--templates PATH` points at AMC's templates when auto-detection fails.
 
 ---
 
@@ -233,6 +388,9 @@ atlas_v9.py  (the interface)
   ├── sim_iterate.py ──── acro_bridge, safety, sim_logs   the sweep
   ├── sim_logs.py ─────── acro_bridge      telemetry capture, .bin download, filing
   ├── check_link.py                        the Test Connection diagnostic
+  ├── amc_tab.py ─── amc_engine, amc_bridge   Configuration tab (presentation only)
+  │     amc_engine.py ── AMC (GPL-3, lazy)   first-flight parameter file, in process
+  │     amc_bridge.py ── acro_bridge, safety   export to / import from AMC, files only
   └── safety.py                            approved ranges, fail closed
 ```
 
@@ -256,6 +414,10 @@ able to do by accident.
 | `sim_logs.py` | Telemetry capture, dataflash download over MAVLink, and filing a simulated run as repository evidence. |
 | `check_link.py` (also a button) | Connection diagnostic. Reachable from the Flight Controller tab as **Test Connection**, or run from a terminal. |
 | `import_build.py` | Adds a build from a parameter file plus a components list. Reads CSV parameter exports **and** real binary dataflash logs. `--dry-run` shows what it would store. |
+| `amc_bridge.py` | Export a build as an AMC project and import AMC templates. File interface only; never imports AMC. Runnable standalone for testing. |
+| `amc_engine.py` | **Prototype.** Runs AMC's engine in process to produce a first-flight parameter file. Imports AMC (GPL-3): see the licensing hold. Runnable standalone: `python amc_engine.py <aircraft id> --out file.param`. |
+| `amc_tab.py` | The Configuration tab. Presentation only. |
+| `amc_metadata/` | Optional offline ArduPilot parameter documentation copied into exports. |
 | `make_demo_data.py` | Writes 17 synthetic aircraft so the Predict tab can be demonstrated. **The data is fake.** `--remove` deletes them. |
 | `atlas_repository.db` | The repository. Keep it with the scripts and `repository_files/`. |
 
