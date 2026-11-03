@@ -1,0 +1,16 @@
+# ATLAS — install with:  pip install -r requirements.txt
+
+# The interface (atlas_gui.py). Pinned to the version ATLAS was tested with.
+nicegui==3.19.0
+
+# Optional: the Flight Controller, Simulation and Standard Bench tabs.
+# Everything else works without it, and those tabs say so when it is missing.
+pymavlink
+
+# Optional: `python atlas_gui.py --native` opens ATLAS in its own desktop
+# window instead of a browser tab. Uncomment to install.
+# pywebview
+
+# Optional, and under a licensing hold (see README): the Configuration tab's
+# embedded AMC engine. Do not include in copies delivered outside West Point.
+# ardupilot_methodic_configurator==5.0.1

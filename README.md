@@ -5,6 +5,8 @@
 | [`atlas/`](atlas/README.md) | **ATLAS v9.1**: Acro configuration intelligence. Stores builds, retrieves similar cases, predicts an Acro tune, checks it against safety bounds, and writes it to a flight controller only after confirmation. Hands full builds to ArduPilot Methodic Configurator as ready projects. |
 | [`sitl_bench/`](sitl_bench/README.md) | **Standardized SITL test bench**: flies an identical test flight in ArduPilot SITL for each parameter configuration and scores every run from its onboard log, so runs can be compared directly. |
 
-Both run on Windows with Python 3 and `pip install pymavlink`. The bench uses
+Both run on Windows with Python 3. ATLAS: `pip install -r atlas/requirements.txt`
+(NiceGUI interface; the classic Tkinter one, `atlas_v9.py`, needs no packages).
+The bench: `pip install pymavlink`. The bench uses
 Mission Planner's SITL binary (`Documents\Mission Planner\sitl\ArduCopter.exe`).
 Bench results are written to `sitl_bench/runs/<timestamp>/`.

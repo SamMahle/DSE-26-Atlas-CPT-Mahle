@@ -1,14 +1,61 @@
 # ATLAS v9.1 | Acro Configuration Intelligence
 
-Run `run_atlas.bat` on Windows, or `python atlas_v9.py`. Python 3 with Tkinter
-required. **No pip packages are needed to launch**, browse, retrieve cases, or
-predict a tune — the random forest is implemented in the standard library.
-`pymavlink` is needed only to write to a flight controller or run simulations,
-and its absence is reported in those two tabs rather than stopping the program.
+```
+pip install -r requirements.txt     # NiceGUI, plus pymavlink for the hardware and simulation tabs
+```
 
-```
-pip install pymavlink      # only for the Flight Controller and Simulation tabs
-```
+Run `run_atlas.bat` on Windows, or `python atlas_gui.py`. ATLAS opens in your
+web browser. Keep the console window open while you use it; closing the window
+stops ATLAS. `python atlas_gui.py --native` opens ATLAS in its own desktop
+window instead (needs `pip install pywebview`).
+
+`pymavlink` is needed only to write to a flight controller or run simulations.
+If it is missing, those tabs say so and the rest of the program keeps working.
+
+The classic Tkinter interface is still included, and still needs **no pip
+packages**: `run_atlas_classic.bat` or `python atlas_v9.py`.
+
+---
+
+## Interface: NiceGUI
+
+The interface was rebuilt in [NiceGUI](https://nicegui.io). It has the same ten
+tabs, the same wording, and the same rules: every value goes through the
+fail-closed `safety.py` check, and you confirm before anything is written to an
+aircraft or a file. Only the presentation changed. No module below the
+interface was modified.
+
+**How it runs.** `atlas_gui.py` starts a small web server, and the window is a
+page that server serves. The server is bound to **127.0.0.1 only**, so no other
+computer can reach it, even on the same network. That matters for the one
+program here that can write to an aircraft. Port 8765 is the default;
+`--port` changes it.
+
+**File paths.** A browser's own file dialog uploads a file's contents but
+never tells the program where the file is. ATLAS needs real paths: it copies
+evidence into `repository_files/`, writes each export next to its
+`.review.json`, and points AMC at folders. So the **Browse…** buttons open a
+picker that lists this computer's drives and folders. You can also type or
+paste a path into its *Folder* box and press Enter.
+
+**One aircraft link, however many tabs.** The flight-controller connection,
+the staged parameters, the last prediction and a running bench belong to the
+program, not to a browser tab. Reloading the page or opening a second tab never
+leaves a link or a bench process running with nothing able to reach it. The
+⏻ button in the header closes the link, stops any bench run, and shuts ATLAS
+down.
+
+| File | Role |
+|---|---|
+| `atlas_gui.py` | The interface: the nine main tabs, the dialogs, background work. |
+| `gui_amc.py` | The Configuration tab (replaces `amc_tab.py` for this interface). |
+| `gui_widgets.py` | Theme, dialogs, the file/folder picker, tables, text panes. No ATLAS logic. |
+| `atlas_core.py` | Paths, constants, the database schema and the `.param` reader, shared by both interfaces so they can never disagree about the repository. Has no GUI import. |
+| `requirements.txt` | NiceGUI (pinned to the tested version) and the optional packages. |
+
+`atlas_v9.py` and `amc_tab.py` are the classic interface. Its only change is
+that it now imports the shared definitions from `atlas_core.py` instead of
+defining them itself.
 
 ---
 
@@ -377,10 +424,13 @@ recorded against a flight. A parameter export carries none.
 
 ## How the modules connect
 
-Everything except `make_demo_data.py` is reachable from the interface:
+Everything except `make_demo_data.py` is reachable from the interface.
+Both interfaces sit on the same modules; the tree is the same for either:
 
 ```
-atlas_v9.py  (the interface)
+atlas_gui.py  (the interface; classic: atlas_v9.py)
+  ├── atlas_core.py ───── acro_bridge      paths, schema, .param reader (shared by both)
+  ├── gui_widgets.py                       dialogs, file picker, tables (classic: Tk widgets)
   ├── acro_bridge.py ──── safety.py        features, targets, labels, migration
   ├── ml_model.py ─────── acro_bridge, safety    prediction
   ├── cbr_engine.py                        case retrieval
@@ -388,7 +438,7 @@ atlas_v9.py  (the interface)
   ├── sim_iterate.py ──── acro_bridge, safety, sim_logs   the sweep
   ├── sim_logs.py ─────── acro_bridge      telemetry capture, .bin download, filing
   ├── check_link.py                        the Test Connection diagnostic
-  ├── amc_tab.py ─── amc_engine, amc_bridge   Configuration tab (presentation only)
+  ├── gui_amc.py ─── amc_engine, amc_bridge   Configuration tab (classic: amc_tab.py)
   │     amc_engine.py ── AMC (GPL-3, lazy)   first-flight parameter file, in process
   │     amc_bridge.py ── acro_bridge, safety   export to / import from AMC, files only
   └── safety.py                            approved ranges, fail closed
@@ -404,7 +454,9 @@ able to do by accident.
 
 | File | Role |
 |---|---|
-| `atlas_v9.py` | The interface. |
+| `atlas_gui.py` | The interface (NiceGUI). See *Interface: NiceGUI* above for it and its helper modules. |
+| `atlas_v9.py` | The classic interface (Tkinter). |
+| `atlas_core.py` | Paths, constants, schema and the `.param` reader, shared by both interfaces. |
 | `acro_bridge.py` | **The glue.** Converts ATLAS rows into model vectors and back. Also owns the schema migration. |
 | `safety.py` | Approved parameter ranges, fail closed. The single definition of "allowed to leave". |
 | `ml_model.py` | Multi-output random forest, standard library only. |
@@ -416,7 +468,7 @@ able to do by accident.
 | `import_build.py` | Adds a build from a parameter file plus a components list. Reads CSV parameter exports **and** real binary dataflash logs. `--dry-run` shows what it would store. |
 | `amc_bridge.py` | Export a build as an AMC project and import AMC templates. File interface only; never imports AMC. Runnable standalone for testing. |
 | `amc_engine.py` | **Prototype.** Runs AMC's engine in process to produce a first-flight parameter file. Imports AMC (GPL-3): see the licensing hold. Runnable standalone: `python amc_engine.py <aircraft id> --out file.param`. |
-| `amc_tab.py` | The Configuration tab. Presentation only. |
+| `gui_amc.py` / `amc_tab.py` | The Configuration tab, NiceGUI / classic. Presentation only. |
 | `amc_metadata/` | Optional offline ArduPilot parameter documentation copied into exports. |
 | `make_demo_data.py` | Writes 17 synthetic aircraft so the Predict tab can be demonstrated. **The data is fake.** `--remove` deletes them. |
 | `atlas_repository.db` | The repository. Keep it with the scripts and `repository_files/`. |
